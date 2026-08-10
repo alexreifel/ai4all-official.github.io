@@ -2,6 +2,8 @@
 
 A tool that reads a US public company's yearly financial statements and estimates the chance it files for bankruptcy within the next year. It runs on a calibrated XGBoost model trained on 20 years of NYSE and NASDAQ filings, benchmarked against the Altman Z-Score, the formula the finance industry has leaned on since 1968, to see whether modern machine learning actually reads the same statements more accurately. Built using Python, pandas, scikit-learn, and XGBoost as part of AI4ALL's Ignite accelerator.
 
+The project started as exploratory analysis on the raw Kaggle dataset in a single notebook, and the biggest turning point was discovering a label leakage bug, where every historical row of a company that eventually failed was marked "failed" instead of only its final year. Fixing that reshaped the entire target definition. From there the project grew from a one-off notebook into a tested, deployable pipeline: six staged analysis notebooks, a `src/` package with its own test suite, and a Streamlit app, with SHAP-based explanations added last, once the core model was already validated.
+
 
 ## Problem Statement <!--- do not change this line -->
 
