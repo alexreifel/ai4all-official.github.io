@@ -32,13 +32,27 @@ A working early-warning signal gives creditors, investors, and employees months 
 4. Calibration dropped the model's Brier score from 0.079 raw to 0.0089 calibrated, which is why the calibrated version, not the higher-F1 primary model, is the one deployed in the app.
 5. Discovered and fixed a label leakage bug in the raw dataset, where every historical row of a company that eventually failed was marked "failed," not just its final year. Correcting this reshaped the entire target definition and was a bigger factor in getting a trustworthy model than any single hyperparameter choice.
 
+![Precision-recall and ROC curves comparing all six models on the 2015-2018 test set](assets/img/model-evaluation-curves.png)
+
+*XGBoost (primary) leads both curves, reaching a PR-AUC 17 times better than random chance and clearly separating from the Altman Z-Score baseline on both metrics.*
+
+![Bankruptcy rate by fiscal year, and raw feature distributions for surviving versus failing firms](assets/img/eda-bankruptcy-rate-and-features.png)
+
+*Bankruptcy rates spike around the 2008-09 financial crisis, which is why the train/validation/test split is chronological rather than random. Features like EBITDA and net income show visibly different distributions between firms that stayed alive and firms that failed the following year.*
+
 ## Methodologies <!--- do not change this line -->
 
-The model is a calibrated XGBoost model, a gradient-boosted ensemble of decision trees, used as a binary classifier. Its inputs are an engineered feature set built from 18 raw financial statement fields per firm-year: the Altman Z-Score's five components, profitability ratios (ROA, EBITDA/total assets, margins), leverage ratios (liabilities/total assets, long-term debt/total assets), liquidity ratios (current ratio, inventory turnover, days sales outstanding), year-over-year and 2-year trend features, structural flags like consecutive years of negative net income, and an unsupervised industry cluster label. Its output is a calibrated probability that the company files for bankruptcy within the next year, bucketed into Lower, Elevated, or High risk bands.
+**Model:** a calibrated XGBoost model, a gradient-boosted ensemble of decision trees, used as a binary classifier.
 
-Data was split by time, not randomly: 1999-2011 for training, 2012-2014 for validation, 2015-2018 for testing, so the model can never see a company's future. Cross-validation folds use grouped exclusion, removing any firm with a row in a fold's validation window from that fold's training set entirely, to prevent firm-level leakage. XGBoost was tuned by time-series cross-validation on the training years, then calibrated with Platt scaling fit on the validation set, so its output probabilities are trustworthy, not just well-ranked.
+**Inputs:** an engineered feature set built from 18 raw financial statement fields per firm-year, including the Altman Z-Score's five components, profitability ratios (ROA, EBITDA/total assets, margins), leverage ratios (liabilities/total assets, long-term debt/total assets), liquidity ratios (current ratio, inventory turnover, days sales outstanding), year-over-year and 2-year trend features, structural flags like consecutive years of negative net income, and an unsupervised industry cluster label.
 
-XGBoost was chosen over the other candidates because it won on PR-AUC and F1 at this roughly 1% base rate, while staying tree-based enough to support SHAP explanations for every individual prediction. That combination, the best test-set ranking performance plus interpretability, is why it is the model deployed in the app, rather than a less transparent model that might trade away the SHAP explanations.
+**Output:** a calibrated probability that the company files for bankruptcy within the next year, bucketed into Lower, Elevated, or High risk bands.
+
+**Data splitting:** by time, not randomly, to prevent the model from ever seeing a company's future: 1999-2011 for training, 2012-2014 for validation, 2015-2018 for testing. Cross-validation folds also use grouped exclusion, removing any firm with a row in a fold's validation window from that fold's training set entirely, to prevent firm-level leakage.
+
+**Calibration:** XGBoost was tuned by time-series cross-validation on the training years, then calibrated with Platt scaling fit on the validation set, so its output probabilities are trustworthy, not just well-ranked.
+
+**Why XGBoost:** it won on PR-AUC and F1 against every other candidate at this roughly 1% base rate, while staying tree-based enough to support SHAP explanations for every individual prediction. That combination, the best test-set ranking performance plus interpretability, is why it is the model deployed in the app, rather than a less transparent model that might trade away the SHAP explanations.
 
 ## Impact & Bias
 
@@ -47,6 +61,10 @@ XGBoost was chosen over the other candidates because it won on PR-AUC and F1 at 
 **Negative effects:** at roughly 17-18% precision, most companies the model flags are false alarms. Careless or public use of a risk score could unfairly damage a healthy company's reputation, financing terms, or stock price. On the other side, false negatives could give lenders or employees false reassurance about a firm that does go on to fail.
 
 **Bias:** the model is trained only on public NYSE and NASDAQ filers from 1999-2018, so it inherits survivorship bias: firms that were quietly delisted or acquired for reasons unrelated to failing are not separated from firms that stayed genuinely healthy, and it has never seen data past 2018, including any COVID-era shock. The unsupervised industry cluster feature could also encode sector-level bias, for example penalizing capital-intensive industries like utilities or manufacturing that naturally run worse liquidity ratios than services firms, even when both are healthy for their own sector.
+
+![SHAP global feature importance, and a comparison of which Altman Z-Score input matters most in 1968 versus in the trained model today](assets/img/shap-feature-importance.png)
+
+*SHAP shows the model leans most heavily on market-value-to-liabilities, while Altman's original formula weighted retained earnings most heavily. The financial warning signs that matter most have shifted since 1968, and SHAP is what lets every individual prediction be checked against that reasoning rather than trusted blindly.*
 
 **Mitigation:** an automated drift check flags when new input diverges from the training reference statistics, and the project positions this tool as a screening and triage aid for human review, not an automated accept or reject decision. Those two guardrails are what keep the biases above from silently compounding once the model is in use.
 
